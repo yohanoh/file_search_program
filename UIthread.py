@@ -8,16 +8,14 @@ import time
 
 # 권한 상승 코드 고려 필요
 def search(pwd, result_list):
-    temp = []
 
-    """
+    temp = []
     dir = os.path.split(pwd)
     size = 0
     temp.append(dir)
     temp.append(pwd)
     temp.append(size)
     result_list.append(temp)
-    """
 
     try:
         # 루트 디렉토리에서 탐색하여 모든 파일 및 디렉토리 목록 스캔
@@ -64,7 +62,7 @@ def init_filelist():
     pool.join()
 
     e = time.time()
-    print(e - s)
+    print("init filelist : ", e - s)
     return result_list
 
 
@@ -75,6 +73,7 @@ class ScanThread(QThread):
 
     def __init__(self):
         super().__init__()
+        self.scan_running = False
 
     def set_db(self, db):
         self.db = db
@@ -82,8 +81,10 @@ class ScanThread(QThread):
     def run(self):
         print("run")
         file_info = init_filelist()
+        self.scan_running = True
         print("after init")
         self.db.insert_filelist(file_info)
+        self.scan_running = False
         print("after insert")
         self.finish_scan_signal.emit(True)
 
@@ -95,6 +96,7 @@ class ReadDBThread(QThread):
 
     def __init__(self):
         super().__init__()
+        self.read_running = False
 
     def set_db(self, db):
         self.db = db
@@ -103,9 +105,11 @@ class ReadDBThread(QThread):
         self.find_str = finding_str
 
     def run(self, all_data = False):
-        if all_data:
-            result = self.db.get_filelist_by_file_name(self.find_str)
+        self.read_running = True
+        if all_data: # 초기 테이블 표시를 위해
+            result = self.db.get_all_filelist()
         else:
-            result = self.db.get_filelist()
+            result = self.db.get_filelist_by_file_name(self.find_str)
 
+        self.read_running = False
         self.finish_read_signal.emit(result)

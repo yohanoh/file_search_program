@@ -23,11 +23,11 @@ class DBManager:
     def insert_filelist(self, filelist):
         self.init_db()
         self.cur.execute('BEGIN')
-        self.cur.executemany("INSERT OR REPLACE INTO FileList values(?, ?, ?) ", filelist)
+        self.cur.executemany("INSERT OR REPLACE INTO FileList values (?, ?, ?)", filelist)
         self.conn.commit()
 
     # 파일 정보를 리스트로 반환, 각 파일 정보는 튜플로 구성됨 -> [(filename1, filepath1, filesize1), ( )...]
-    def get_filelist(self):
+    def get_all_filelist(self):
         self.init_db()
         s = time.time()
         query = "SELECT * FROM FileList"
@@ -41,7 +41,8 @@ class DBManager:
         self.init_db()
         s = time.time()
         self.cur.execute('BEGIN')
-        query = "SELECT * FROM FileList WHERE FILE_NAME LIKE '%{0}%'".format(file_name)
+        #query = "SELECT * FROM FileList WHERE FILE_NAME LIKE '%{0}%'".format(file_name)
+        query = "SELECT * FROM FileList WHERE INSTR(FILE_NAME, '{0}') > 0".format(file_name)
         rows = self.cur.execute(query).fetchall()
         self.conn.commit()
         e = time.time()

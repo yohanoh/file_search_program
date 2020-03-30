@@ -93,10 +93,14 @@ def find_attribute(attr_off, type, sec, clu, f):
         attr_size = LtoI(attr_off[0x04:0x08])
         attr_off = attr_off[attr_size:]
 
+
 if __name__ == '__main__':
+    # c드라이브를 파일 열기와 동일하게 연다.
     f = open('\\\\.\\c:', 'rb')
     sector_size, cluster_size, mft_offset = get_mft_offset(f)
 
+    print(mft_offset)
+    """
     f.seek(mft_offset)
     mft_buf = bytearray(f.read(0x200))
     mft_attribute_offset = LtoI(mft_buf[0x14:0x16])
@@ -104,4 +108,4 @@ if __name__ == '__main__':
     attr_off = mft_buf[mft_attribute_offset:mft_size]
 
     find_attribute(attr_off, 0x80, sector_size, cluster_size, f)
-
+    """
