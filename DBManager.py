@@ -1,8 +1,10 @@
 import sqlite3
 import time
+import os
 
 class DBManager:
     def __init__(self):
+        self.make_data_directory()
         self.init_db()
         # sql 속도 향상을 위한 설정값
         self.cur.execute('pragma journal_mode=wal')
@@ -15,6 +17,15 @@ class DBManager:
 
         self.cur.execute(sql)
         self.conn.commit()
+
+    def make_data_directory(self):
+        try:
+            if not(os.path.isdir('Data')):
+                os.makedirs(os.path.join("Data"))
+        except OSError as e:
+            if e.errno != os.errno.EEXIST:
+                print("Failed to create directory")
+
 
     def init_db(self):
         self.conn = sqlite3.connect('Data\\data.db')
@@ -33,7 +44,7 @@ class DBManager:
         query = "SELECT * FROM FileList"
         rows = self.cur.execute(query).fetchall()
         e = time.time()
-        print(e - s)
+        print("get total filelist : ", e - s)
         return rows
 
     # 사용자가 입력한 값에 따라 해당 문자열을 포함하는 파일 정보를 리턴
@@ -46,5 +57,5 @@ class DBManager:
         rows = self.cur.execute(query).fetchall()
         self.conn.commit()
         e = time.time()
-        print(e - s)
+        print("get file name : ", e - s)
         return rows
