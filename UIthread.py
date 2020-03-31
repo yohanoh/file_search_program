@@ -2,47 +2,61 @@ from PyQt5.QtCore import *
 from ScanDirectory import init_filelist
 
 import os
-from multiprocessing import Manager, freeze_support, Pool
+from multiprocessing import Manager, freeze_support, Pool, Process, Queue
 from itertools import repeat
 import time
 
+# 스택에 탐색 대상 디렉토리를 넣고 탐색하는 방법도 고려..
 # 권한 상승 코드 고려 필요
-def search(pwd, result_list):
-
+def make_filelist(content, path, isdir):
     temp = []
-    dir = os.path.split(pwd)
-    size = 0
-    temp.append(dir)
-    temp.append(pwd)
+    temp.append(content)
+    temp.append(os.path.join(path,content))
+    if isdir:
+        size = 0
+    else:
+        size = os.stat(temp[1]).st_size
+
     temp.append(size)
-    result_list.append(temp)
+    return temp
+
+
+def search(pwd, result_list):
+    file = os.path.basename(pwd)
+    path = os.path.dirname(pwd)
 
     try:
+        if os.path.isdir(pwd):
+            temp = make_filelist(file, path, True)
+            result_list.append(temp)
+        else:
+            temp = make_filelist(file, path, False)
+            result_list.append(temp)
+            return
+
         # 루트 디렉토리에서 탐색하여 모든 파일 및 디렉토리 목록 스캔
         for path, dirs, files in os.walk(pwd):
             if len(dirs) != 0:
                 for dir in dirs:
-                    temp = []
-                    temp.append(dir)
-                    temp.append(os.path.join(path, dir))
-                    size = 0
-                    temp.append(size)
+                    temp = make_filelist(dir, path, True)
                     result_list.append(temp)
 
             for file in files:
-                temp = []
-                temp.append(file)
-                temp.append(os.path.join(path, file))
-                size = os.stat(temp[1]).st_size
-                temp.append(size)
+                temp = make_filelist(file, path, False)
                 result_list.append(temp)
-    except OSError:
-        print(path+"\\" + file)
+
+    except WindowsError as e:
+        #print("win : ", e)
+        pass
+    except OSError as e:
+        #print("os : ", e)
+        pass
+    except Exception as e:
         pass
 
 
 def init_filelist():
-    freeze_support()
+    #freeze_support()
     s = time.time()
     root_dir = "c:\\"
     files = os.listdir(root_dir)
@@ -80,12 +94,18 @@ class ScanThread(QThread):
 
     def run(self):
         print("run")
+        s = time.time()
         file_info = init_filelist()
+        e = time.time()
+        print("finish init : ", e - s)
+
         self.scan_running = True
-        print("after init")
+
+        s = time.time()
         self.db.insert_filelist(file_info)
+        e = time.time()
+        print("finish insert : ", e - s)
         self.scan_running = False
-        print("after insert")
         self.finish_scan_signal.emit(True)
 
 
