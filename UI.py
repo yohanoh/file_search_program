@@ -2,13 +2,15 @@ import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QLineEdit, QVBoxLayout, QLabel, QTableView
 from PyQt5.QtCore import *
 from DBManager import DBManager
-from UIthread import ScanThread, ReadDBThread
-from multiprocessing import freeze_support
 import webbrowser
-import time
 import pandas as pd
 
-#from UI_handler import *
+from UIthread import ScanThread, ReadDBThread
+from multiprocessing import freeze_support
+
+import time
+
+
 
 ########################################################################################################################
 # UI 클래스
@@ -44,20 +46,23 @@ class UI(QWidget):
         self.label.setText("총 {0} 개 검색됨".format(total))
         self.tableview.clearSpans()
 
+        self.table_model.layoutAboutToBeChanged.emit()
         self.table_model.setDataFrame(file_list)
+        self.table_model.layoutChanged.emit()
+
         self.tableview.setModel(self.table_model)
         self.tableview.resizeColumnsToContents()
 
     ####################################################################################################################
-    # setTable
+    # initTable
     # = 테이블 표시를 위한 기본 설정을 하는 메소드이다.
     #   테이블의 entry를 클릭 했을 때, 파일이나 디렉토리를 실행하기 위한 이벤트(execute_file)를 연결해주고,
     #   테이블의 헤더를 클릭 했을 때 정렬 기능을 실행하기 위한 이벤트(sort_data)도 연결해준다.
     ####################################################################################################################
-    def setTable(self):
+    def initTable(self):
         self.header_sorted_state = [False, False, False]
-        self.table_model = TableModel()
 
+        self.table_model = TableModel()
         self.tableview.setSortingEnabled(True)
         self.start_read_db_thread(all_data=True)
 
@@ -82,7 +87,7 @@ class UI(QWidget):
 
         # 검색된 결과를 표시하는 테이블
         self.tableview = QTableView()
-        self.setTable()
+        self.initTable()
 
         # UI 구성
         self.vbox = QVBoxLayout()
@@ -95,26 +100,36 @@ class UI(QWidget):
         self.setGeometry(800, 200, 1500, 1000)
         self.show()
 
+########################################################################################################################
+#     이벤트 핸들러 메소드
+########################################################################################################################
+
     ####################################################################################################################
-    # 이벤트 핸들러 메소드
+    # sort_data
+    # - column_index : 선택 된 헤더의 column_index
+    # = 헤더(File, Path, Size(kb))를 클릭했을 때 정렬을 수행하기 위한 이벤트 처리 메소드
+    #   각 헤더 마다 가지고 있는 header_sorted_state 정보를 통해 해당 열에 대한 정렬 기준을 수립한다.
+    #   False -> 오름 차순으로, True -> 내림 차순으로 적용
     ####################################################################################################################
     @pyqtSlot(int)
     def sort_data(self, column_index):
-        print("sort")
-        s = time.time()
         self.table_model.layoutAboutToBeChanged.emit()
+
         if self.header_sorted_state[column_index]:
-            self.table_model._data = self.table_model._data.sort_values(self.table_model.headers[column_index])
+            self.table_model._data = self.table_model._data.sort_values(self.table_model.headers[column_index], ascending=False)
             self.header_sorted_state[column_index] = False
         else:
-            self.table_model._data = self.table_model._data.sort_values(self.table_model.headers[column_index], ascending=False)
+            self.table_model._data = self.table_model._data.sort_values(self.table_model.headers[column_index])
             self.header_sorted_state[column_index] = True
-        e = time.time()
-        print("sorting time : ", e - s)
 
         self.table_model.layoutChanged.emit()
 
-    # 숫자 정렬 구현하기... 숫자도 문자로 인식해서 정렬중..
+    ####################################################################################################################
+    # execute_file
+    # - signal : 선택된 tableview의 entry에 대한 정보를 담고 있는 QModeIndex 객체
+    # = 테이블 상에서 entry을 더블 클릭했을 때 파일 실행을 수행하기 위한 이벤트 처리 메소드
+    #   선택된 entry의 경로명을 토대로 파일을 실행하거나 디렉토리를 연다.
+    ####################################################################################################################
     @pyqtSlot(QModelIndex)
     def execute_file(self, signal):
         row = signal.row()
@@ -125,37 +140,55 @@ class UI(QWidget):
 
         webbrowser.open(path)
 
-    @pyqtSlot(bool)
-    def finish_scan(self, check):
+    ####################################################################################################################
+    # finish_scan
+    # = scan_thread의 동작이 완료되었을 때을 위한 이벤트 처리 메소드
+    #   백그라운드에서 계속 디렉토리 스캔을 수행하기 위해 다시 scan_thred을 실행한다.
+    ####################################################################################################################
+    @pyqtSlot()
+    def finish_scan(self):
         print("scan completed!!")
-        pass
+        self.start_scan_thread()
 
-
+    ####################################################################################################################
+    # displayFiles
+    # - file_list : 테이블 상에 표시한 파일들의 정보를 담고 있는 리스트 (파일 정보는 파일명, 경로, 크기를 튜플 형태로 저장)
+    # = read_db_thread에 의해 db에서 파일 정보를 읽어왔을 때을 위한 이벤트 처리 메소드
+    #   read_db_thread에 의해 db에서 읽어온, 파일 정보를 토대로 setTableData 메소드를 호출하여 UI에 나타낸다.
+    ####################################################################################################################
     @pyqtSlot(list)
     def displayFiles(self, file_list):
-        try:
-            self.setTableData(file_list)
-        except Exception as e:
-            print("dis : ", e)
+        self.setTableData(file_list)
 
-    # 사용자의 입력값이 변경될 때 실행되는 메소드
+    ####################################################################################################################
+    # start_read_db_thread
+    # - all_data : 디폴트 값으로 False로 설정되어있고, True로 설정되어있는 경우 DB에 저장되어있는 모든 파일 정보를 읽어온다.
+    # = 사용자로부터 입력값이 발생했을 때을 위한 이벤트 처리 메소드
+    #   scan_thread 나 read_db_thread 가 동작하고 있지 않을 경우, 사용자로부터 입력받은 문자열을 포함한 파일 정보를
+    #   DB로부터 읽어온다.
+    ####################################################################################################################
     @pyqtSlot()
     def start_read_db_thread(self, all_data=False):
-        while self.scan_thread.scan_running or self.read_db_thread.read_running:
-            text = self.qle.text()
-            length = len(text)
-            text = text[:length - 1]
-            self.qle.setText(text)
-            return
+        if self.read_db_thread.read_running or self.scan_thread.scan_running:
+            time.sleep(0.05)
 
         self.read_db_thread.set_finding_str(self.qle.text())
         self.read_db_thread.start(all_data)
 
-    @pyqtSlot()
+    ####################################################################################################################
+    # start_scan_thread
+    # = 디렉토리 스캔을 수행하는 scan_thread 실행시키기 위한 메소드
+    ####################################################################################################################
     def start_scan_thread(self):
+        print("start scan")
         self.scan_thread.start()
 
-
+########################################################################################################################
+# TableModel 클래스
+# QAbstractTableModel 인터페이스를 상속받아 세부 메소드를 구현하고 있다.
+# View - Model 관점에서 View는 단지 데이터를 나타내기 위한 객체이며, Model은 데이터에 처리 또는 정의를 나타내는 객체이다.
+# 이러한 Model의 객체에 대한 정의를 내리는 클래스이다.
+########################################################################################################################
 class TableModel(QAbstractTableModel):
     def __init__(self):
         super(TableModel, self).__init__()
