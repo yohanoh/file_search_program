@@ -1,9 +1,8 @@
 from PyQt5.QtCore import *
-from ScanDirectory import init_filelist
-
 import os
-from multiprocessing import Manager, freeze_support, Pool, Process, Queue
+from multiprocessing import Manager, freeze_support, Pool, Process
 from itertools import repeat
+from queue import Queue
 
 import time
 
@@ -18,6 +17,7 @@ import time
 # = 사용자로부터 입력 받은 세 가지의 인자를 하나의 리스트에 넣어주는 메소드
 ########################################################################################################################
 def make_filelist(content, path, isdir):
+
     temp = []
     temp.append(content)
     temp.append(os.path.join(path,content))
@@ -27,8 +27,10 @@ def make_filelist(content, path, isdir):
         size = os.stat(temp[1]).st_size
 
     temp.append(size)
+
     return temp
 
+"""
 ########################################################################################################################
 # search
 # - pwd : 현재 파일 또는 디렉토리의 경로
@@ -37,35 +39,83 @@ def make_filelist(content, path, isdir):
 #   파일일 경우, result_list에 해당 파일에 정보를 넣어주고,
 #   디렉토리일 경우, os.walk 을 통해 하위 디렉토리 및 파일 정보를 result_list 에 넣어준다.
 ########################################################################################################################
-def search(pwd, result_list):
-    file = os.path.basename(pwd)
-    path = os.path.dirname(pwd)
+def search(file_abs_path, result_list):
+    file_name = os.path.basename(file_abs_path)
+    path = os.path.dirname(file_abs_path)
+    target_queue = Queue()
+    try:
+        if os.path.isdir(file_abs_path):
+            temp = make_filelist(file_name, path, True)
+            result_list.append(temp)
+        else: # 파일일 경우, result_list에 추가 후 리턴
+            temp = make_filelist(file_name, path, False)
+            result_list.append(temp)
+            return
+        
+        target_queue.put(file_abs_path)
+
+        while target_queue.qsize() > 0:
+            
+            front_file = target_queue.get()
+            
+            current_file_list = os.listdir(front_file)
+            print(current_file_list)
+            for file_name in current_file_list:
+                absolute_path = os.path.join(front_file, file_name)
+                
+                if os.path.isdir(absolute_path):
+                    temp = make_filelist(file_name, front_file, True)
+                    result_list.append(temp)
+                    target_queue.put(absolute_path)
+                else:
+                    temp = make_filelist(file_name, front_file, False)
+                    result_list.append(temp)
+
+    except WindowsError as e:
+        pass
+    except OSError as e:
+        pass
+    except Exception as e:
+        pass
+
+"""
+########################################################################################################################
+# search
+# - pwd : 현재 파일 또는 디렉토리의 경로
+# - result_list : 여러 프로세스에 의해 갱신되는 파일 리스트 들을 보관하게 되는 리스트 (프로세스 간 공유 리스트)
+# = 인자로 넘겨 받은 pwd을 통해 해당 경로에 있는 것이 파일 인지 디렉토리 인지를 파악한다.
+#   파일일 경우, result_list에 해당 파일에 정보를 넣어주고,
+#   디렉토리일 경우, os.walk 을 통해 하위 디렉토리 및 파일 정보를 result_list 에 넣어준다.
+########################################################################################################################
+def search(file_abs_path, result_list):
+    
+    file_name = os.path.basename(file_abs_path)
+    path = os.path.dirname(file_abs_path)
 
     try:
-        if os.path.isdir(pwd):
-            temp = make_filelist(file, path, True)
+        if os.path.isdir(file_abs_path):
+            temp = make_filelist(file_name, path, True)
             result_list.append(temp)
         else:
-            temp = make_filelist(file, path, False)
+            temp = make_filelist(file_name, path, False)
             result_list.append(temp)
             return
 
-        # 루트 디렉토리에서 탐색하여 모든 파일 및 디렉토리 목록 스캔
-        for path, dirs, files in os.walk(pwd):
-            if len(dirs) != 0:
-                for dir in dirs:
-                    temp = make_filelist(dir, path, True)
-                    result_list.append(temp)
-
-            for file in files:
-                temp = make_filelist(file, path, False)
+        current_file_list = os.listdir(file_abs_path)
+        for file_name in current_file_list:
+            absolute_path = os.path.join(file_abs_path, file_name)
+            
+            if os.path.isdir(absolute_path):
+                temp = make_filelist(file_name, file_abs_path, True)
+                result_list.append(temp)
+                search(absolute_path, result_list)
+            else:
+                temp = make_filelist(file_name, file_abs_path, False)
                 result_list.append(temp)
 
     except WindowsError as e:
-        #print("win : ", e)
         pass
     except OSError as e:
-        #print("os : ", e)
         pass
     except Exception as e:
         pass
@@ -90,9 +140,11 @@ def init_filelist():
     manager = Manager()
     result_list = manager.list()
 
-    pool.starmap(search, zip(filelist, repeat(result_list)))
-    pool.close()
-    pool.join()
+    try:
+        pool.starmap(search, zip(filelist, repeat(result_list)))
+    finally:
+        pool.close()
+        pool.join()
 
     return result_list
 
@@ -103,6 +155,7 @@ def init_filelist():
 class ScanThread(QThread):
 
     finish_scan_signal = pyqtSignal()
+    
 
     def __init__(self):
         super().__init__()
@@ -112,18 +165,17 @@ class ScanThread(QThread):
         self.db = db
 
     def run(self):
-        print("run")
         s = time.time()
-        file_info = init_filelist()
+        file_list = init_filelist()
         e = time.time()
-        print("finish init : ", e - s)
-
+        
+        print("scan time : ", e - s)
         self.scan_running = True
 
         s = time.time()
-        self.db.insert_filelist(file_info)
+        self.db.insert_filelist(file_list)
         e = time.time()
-        print("finish insert : ", e - s)
+        print("insert time: ", e - s)
         self.scan_running = False
         self.finish_scan_signal.emit()
 
@@ -134,9 +186,10 @@ class ScanThread(QThread):
 ########################################################################################################################
 class ReadDBThread(QThread):
     finish_read_signal = pyqtSignal(list)
+    
 
     def __init__(self):
-        super().__init__()
+        super().__init__()   
         self.read_running = False
 
     def set_db(self, db):

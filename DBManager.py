@@ -72,11 +72,10 @@ class DBManager:
             cur = con.cursor()
             s = time.time()
             cur.execute('BEGIN')
-            #query = "SELECT * FROM FileList WHERE FILE_NAME LIKE '%{0}%'".format(file_name)
-            query = "SELECT * FROM FileList WHERE INSTR(FILE_NAME, '{0}') > 0".format(file_name)
+            query = "SELECT * FROM FileList WHERE FILE_NAME LIKE '%{0}%'".format(file_name)
+            #query = "SELECT * FROM FileList WHERE INSTR(FILE_NAME, '{0}') > 0".format(file_name)
             rows = cur.execute(query).fetchall()
             con.commit()
             e = time.time()
-            print("get file name : ", e - s)
 
         return rows

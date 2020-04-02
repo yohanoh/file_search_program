@@ -32,26 +32,10 @@ class UI(QWidget):
         self.scan_thread.set_db(self.DB)
         self.scan_thread.finish_scan_signal.connect(self.finish_scan)
         self.start_scan_thread()
+        self.first_print = False
 
         self.initUI()
 
-    ####################################################################################################################
-    # setTableData
-    # - file_list : DB로 SQL 쿼리문을 통해 획득한, 테이블에 표시할 파일 정보(이름, 경로, 사이즈) 가 저장되어 있는 리스트
-    # = file_list를 넘겨 받아 몇 개에 파일을 넘겨 받았는지를 label 위젯에 표시한다.
-    #   데이터를 표시하는 tableview 에 기존 정보가 포함되어 있을 수 있으므로 clear 해준 후, 데이터를 표시한다.
-    ####################################################################################################################
-    def setTableData(self, file_list):
-        total = len(file_list)
-        self.label.setText("총 {0} 개 검색됨".format(total))
-        self.tableview.clearSpans()
-
-        self.table_model.layoutAboutToBeChanged.emit()
-        self.table_model.setDataFrame(file_list)
-        self.table_model.layoutChanged.emit()
-
-        self.tableview.setModel(self.table_model)
-        self.tableview.resizeColumnsToContents()
 
     ####################################################################################################################
     # initTable
@@ -147,6 +131,7 @@ class UI(QWidget):
     ####################################################################################################################
     @pyqtSlot()
     def finish_scan(self):
+        self.start_read_db_thread(all_data=True)
         print("scan completed!!")
         self.start_scan_thread()
 
@@ -154,11 +139,23 @@ class UI(QWidget):
     # displayFiles
     # - file_list : 테이블 상에 표시한 파일들의 정보를 담고 있는 리스트 (파일 정보는 파일명, 경로, 크기를 튜플 형태로 저장)
     # = read_db_thread에 의해 db에서 파일 정보를 읽어왔을 때을 위한 이벤트 처리 메소드
-    #   read_db_thread에 의해 db에서 읽어온, 파일 정보를 토대로 setTableData 메소드를 호출하여 UI에 나타낸다.
+    #   file_list를 통해 몇 개의 파일을 넘겨 받았는지를 Qlabel 위젯에 표시한다.
+    #   또한 데이터를 표시하는 QtableView 에 기본 정보을 clear 해준 후, 데이터를 표시한다.
     ####################################################################################################################
     @pyqtSlot(list)
     def displayFiles(self, file_list):
-        self.setTableData(file_list)
+        total = len(file_list)
+        self.label.setText("총 {0} 개 검색됨".format(total))
+        if total > 0: self.first_print = True
+
+        self.tableview.clearSpans()
+
+        self.table_model.layoutAboutToBeChanged.emit()
+        self.table_model.setDataFrame(file_list)
+        self.table_model.layoutChanged.emit()
+
+        self.tableview.setModel(self.table_model)
+        self.tableview.resizeColumnsToContents()
 
     ####################################################################################################################
     # start_read_db_thread
@@ -170,8 +167,8 @@ class UI(QWidget):
     @pyqtSlot()
     def start_read_db_thread(self, all_data=False):
         if self.read_db_thread.read_running or self.scan_thread.scan_running:
-            time.sleep(0.05)
-
+            time.sleep(0.1)
+            
         self.read_db_thread.set_finding_str(self.qle.text())
         self.read_db_thread.start(all_data)
 
@@ -192,7 +189,7 @@ class UI(QWidget):
 class TableModel(QAbstractTableModel):
     def __init__(self):
         super(TableModel, self).__init__()
-        self.headers = ["File", "Path", "Size(KB)"]
+        self.headers = ["File", "Path", "Size(bytes)"]
 
     def setDataFrame(self, filelist):
         self._data = pd.DataFrame(filelist, columns=self.headers)
