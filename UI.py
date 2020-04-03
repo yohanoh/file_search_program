@@ -133,7 +133,7 @@ class UI(QWidget):
     def finish_scan(self):
         self.start_read_db_thread(all_data=True)
         print("scan completed!!")
-        self.start_scan_thread()
+        #self.start_scan_thread()
 
     ####################################################################################################################
     # displayFiles

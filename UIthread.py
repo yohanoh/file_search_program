@@ -27,10 +27,9 @@ def make_filelist(content, path, isdir):
         size = os.stat(temp[1]).st_size
 
     temp.append(size)
-
     return temp
 
-"""
+
 ########################################################################################################################
 # search
 # - pwd : 현재 파일 또는 디렉토리의 경로
@@ -39,44 +38,75 @@ def make_filelist(content, path, isdir):
 #   파일일 경우, result_list에 해당 파일에 정보를 넣어주고,
 #   디렉토리일 경우, os.walk 을 통해 하위 디렉토리 및 파일 정보를 result_list 에 넣어준다.
 ########################################################################################################################
-def search(file_abs_path, result_list):
-    file_name = os.path.basename(file_abs_path)
-    path = os.path.dirname(file_abs_path)
-    target_queue = Queue()
-    try:
-        if os.path.isdir(file_abs_path):
-            temp = make_filelist(file_name, path, True)
-            result_list.append(temp)
-        else: # 파일일 경우, result_list에 추가 후 리턴
-            temp = make_filelist(file_name, path, False)
-            result_list.append(temp)
-            return
-        
-        target_queue.put(file_abs_path)
+def search(file_abs_path, result_list, target_list):
+    target_list.append(file_abs_path)
+    # 누락되는 정보 확인하기        
+    while len(target_list) > 0:
+        front_file = target_list.pop(0)
 
-        while target_queue.qsize() > 0:
-            
-            front_file = target_queue.get()
-            
-            current_file_list = os.listdir(front_file)
-            print(current_file_list)
+        file_name = os.path.basename(file_abs_path)
+        path = os.path.dirname(file_abs_path)
+
+        try:
+            if os.path.isdir(front_file): # 디렉토리
+                temp = make_filelist(file_name, path, True)
+                result_list.append(temp)
+                current_file_list = os.listdir(front_file)
+            else: # 파일
+                temp = make_filelist(file_name, path, False)
+                result_list.append(temp)
+                continue
+
             for file_name in current_file_list:
                 absolute_path = os.path.join(front_file, file_name)
-                
-                if os.path.isdir(absolute_path):
-                    temp = make_filelist(file_name, front_file, True)
-                    result_list.append(temp)
-                    target_queue.put(absolute_path)
-                else:
+                    
+                if os.path.isdir(absolute_path): # 디렉토리인 경우
+                    target_list.append(absolute_path)
+                else: # 일반 파일인 경우
                     temp = make_filelist(file_name, front_file, False)
                     result_list.append(temp)
 
-    except WindowsError as e:
+        except WindowsError as e:
+            #print(e)
+            pass
+        except OSError as e:
+            #print(e)
+            pass
+        except Exception as e:
+            #print(e)
+            pass
+
+
+########################################################################################################################
+# init_filelist
+# = 사용자의 cpu 수 * 2의 갯수에 해당하는 프로세스를 생성하고, 각 프로세스들이 서로 다른 경로의 디렉토리를 탐색해서
+#   하위 파일 및 디렉토리 정보를 수집하도록 하는 함수
+########################################################################################################################
+def init_filelist():
+    manager = Manager()
+    result_list = manager.list()
+    target_list = manager.list()
+
+    root_dir = "c:\\"
+    files = os.listdir(root_dir)
+
+    file_list = []
+    for f in files:
+        file_list.append(os.path.join(root_dir, f))
+    
+    cpu = os.cpu_count()
+    pool = Pool(cpu * 2)
+
+    try:
+        pool.starmap(search, zip(file_list, repeat(result_list), repeat(target_list)))
+    except IndexError:
         pass
-    except OSError as e:
-        pass
-    except Exception as e:
-        pass
+    finally:
+        pool.close()
+        pool.join()
+
+    return result_list
+
 
 """
 ########################################################################################################################
@@ -147,6 +177,7 @@ def init_filelist():
         pool.join()
 
     return result_list
+"""
 
 ########################################################################################################################
 # ScanThread 클래스
@@ -156,7 +187,6 @@ class ScanThread(QThread):
 
     finish_scan_signal = pyqtSignal()
     
-
     def __init__(self):
         super().__init__()
         self.scan_running = False
@@ -165,6 +195,7 @@ class ScanThread(QThread):
         self.db = db
 
     def run(self):
+        print("run..")
         s = time.time()
         file_list = init_filelist()
         e = time.time()

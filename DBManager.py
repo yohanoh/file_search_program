@@ -70,12 +70,9 @@ class DBManager:
     def get_filelist_by_file_name(self, file_name):
         with sqlite3.connect('Data\\data.db') as con:
             cur = con.cursor()
-            s = time.time()
             cur.execute('BEGIN')
             query = "SELECT * FROM FileList WHERE FILE_NAME LIKE '%{0}%'".format(file_name)
-            #query = "SELECT * FROM FileList WHERE INSTR(FILE_NAME, '{0}') > 0".format(file_name)
             rows = cur.execute(query).fetchall()
             con.commit()
-            e = time.time()
 
         return rows
