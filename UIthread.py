@@ -17,19 +17,19 @@ import time
 # = 사용자로부터 입력 받은 세 가지의 인자를 하나의 리스트에 넣어주는 메소드
 ########################################################################################################################
 def make_filelist(content, path, isdir):
-
     temp = []
     temp.append(content)
-    temp.append(os.path.join(path,content))
+    temp.append(path)
+
     if isdir:
         size = 0
     else:
-        size = os.stat(temp[1]).st_size
+        size = os.stat(os.path.join(path, content)).st_size
 
     temp.append(size)
     return temp
 
-
+"""
 ########################################################################################################################
 # search
 # - pwd : 현재 파일 또는 디렉토리의 경로
@@ -38,44 +38,47 @@ def make_filelist(content, path, isdir):
 #   파일일 경우, result_list에 해당 파일에 정보를 넣어주고,
 #   디렉토리일 경우, os.walk 을 통해 하위 디렉토리 및 파일 정보를 result_list 에 넣어준다.
 ########################################################################################################################
-def search(file_abs_path, result_list, target_list):
-    target_list.append(file_abs_path)
-    # 누락되는 정보 확인하기        
+def search(target_list):
+    result_list = []
+    # 누락되는 정보 확인하기
     while len(target_list) > 0:
         front_file = target_list.pop(0)
 
-        file_name = os.path.basename(file_abs_path)
-        path = os.path.dirname(file_abs_path)
+        file_name = os.path.basename(front_file)
+        path = os.path.dirname(front_file)
 
         try:
-            if os.path.isdir(front_file): # 디렉토리
+            if os.path.isdir(front_file):  # 디렉토리
                 temp = make_filelist(file_name, path, True)
                 result_list.append(temp)
                 current_file_list = os.listdir(front_file)
-            else: # 파일
+            else:  # 파일
                 temp = make_filelist(file_name, path, False)
                 result_list.append(temp)
                 continue
 
             for file_name in current_file_list:
                 absolute_path = os.path.join(front_file, file_name)
-                    
-                if os.path.isdir(absolute_path): # 디렉토리인 경우
+
+                if os.path.isdir(absolute_path):  # 디렉토리인 경우
                     target_list.append(absolute_path)
-                else: # 일반 파일인 경우
+                else:  # 일반 파일인 경우
                     temp = make_filelist(file_name, front_file, False)
                     result_list.append(temp)
 
         except WindowsError as e:
-            #print(e)
+            # print(e)
             pass
         except OSError as e:
-            #print(e)
+            # print(e)
             pass
         except Exception as e:
-            #print(e)
+            # print(e)
             pass
 
+    return result_list
+
+"""
 
 ########################################################################################################################
 # init_filelist
@@ -83,31 +86,63 @@ def search(file_abs_path, result_list, target_list):
 #   하위 파일 및 디렉토리 정보를 수집하도록 하는 함수
 ########################################################################################################################
 def init_filelist():
-    manager = Manager()
-    result_list = manager.list()
-    target_list = manager.list()
+    target_list = []
 
     root_dir = "c:\\"
     files = os.listdir(root_dir)
 
-    file_list = []
     for f in files:
-        file_list.append(os.path.join(root_dir, f))
-    
-    cpu = os.cpu_count()
-    pool = Pool(cpu * 2)
+        target_list.append(os.path.join(root_dir, f))
 
-    try:
-        pool.starmap(search, zip(file_list, repeat(result_list), repeat(target_list)))
-    except IndexError:
-        pass
-    finally:
-        pool.close()
-        pool.join()
+    result_list = search(target_list)
 
     return result_list
 
 
+def search(target_list):
+    result_list = []
+
+    for front_file in target_list:
+        file = os.path.basename(front_file)
+        path = os.path.dirname(front_file)
+
+        try:
+            if os.path.isdir(front_file):
+                temp = make_filelist(file, path, True)
+                result_list.append(temp)
+            else:
+                temp = make_filelist(file, path, False)
+                result_list.append(temp)
+                continue
+
+            # 루트 디렉토리에서 탐색하여 모든 파일 및 디렉토리 목록 스캔
+            for path, dirs, files in os.walk(front_file):
+                if len(dirs) != 0:
+                    for dir in dirs:
+                        temp = make_filelist(dir, path, True)
+                        result_list.append(temp)
+
+                for file in files:
+                    temp = make_filelist(file, path, False)
+                    result_list.append(temp)
+
+        except WindowsError as e:
+            #print("win : ", e)
+            pass
+        except OSError as e:
+            #print("os : ", e)
+            pass
+        except Exception as e:
+            pass
+
+    f = open("re.txt", "w")
+    string = ""
+    for re in result_list:
+        string = string + re[0] + "//" + re[1] + "\n"
+    f.write(string)
+    f.close()
+
+    return result_list
 """
 ########################################################################################################################
 # search

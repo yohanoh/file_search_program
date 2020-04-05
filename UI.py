@@ -10,8 +10,6 @@ from multiprocessing import freeze_support
 
 import time
 
-
-
 ########################################################################################################################
 # UI 클래스
 # UI 를 구성하기 위한 클래스
@@ -81,7 +79,7 @@ class UI(QWidget):
 
         self.setLayout(self.vbox)
         self.setWindowTitle('File Search Program')
-        self.setGeometry(800, 200, 1500, 1000)
+        self.setGeometry(300, 100, 1500, 800)
         self.show()
 
 ########################################################################################################################
@@ -117,10 +115,21 @@ class UI(QWidget):
     @pyqtSlot(QModelIndex)
     def execute_file(self, signal):
         row = signal.row()
+        col = signal.column()
 
-        index = signal.sibling(row, 1)
-        index_dict = self.table_model.itemData(index)
-        path = index_dict.get(0)
+        if col == 1:
+            index = signal.sibling(row, col)
+            index_dict = self.table_model.itemData(index)
+            path = index_dict.get(0)
+        else:
+            findex = signal.sibling(row, 0)
+            findex_dict = self.table_model.itemData(findex)
+            file = findex_dict.get(0)
+
+            pindex = signal.sibling(row, 1)
+            pindex_dict = self.table_model.itemData(pindex)
+            path = pindex_dict.get(0)
+            path = path + "\\" + file
 
         webbrowser.open(path)
 
@@ -133,7 +142,6 @@ class UI(QWidget):
     def finish_scan(self):
         self.start_read_db_thread(all_data=True)
         print("scan completed!!")
-        #self.start_scan_thread()
 
     ####################################################################################################################
     # displayFiles

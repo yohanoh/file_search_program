@@ -36,7 +36,6 @@ class DBManager:
             if e.errno != os.errno.EEXIST:
                 print("Failed to create directory")
 
-
     ####################################################################################################################
     # insert_filelist
     # - filelist : DB에 insert할 파일 정보들 -> [(filename, filepath, filesize),()...]
