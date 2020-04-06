@@ -19,6 +19,9 @@ class UI(QWidget):
     def __init__(self):
         super().__init__()
         self.DB = DBManager()
+        self.file_list = []
+        self.s = 0
+        self.e = 0
 
         # DB 정보를 읽기 위한 쓰레드
         self.read_db_thread = ReadDBThread()
@@ -30,8 +33,9 @@ class UI(QWidget):
         self.scan_thread.set_db(self.DB)
         self.scan_thread.finish_scan_signal.connect(self.finish_scan)
         self.start_scan_thread()
+        
         self.first_print = False
-
+        
         self.initUI()
 
 
@@ -47,7 +51,7 @@ class UI(QWidget):
         self.table_model = TableModel()
         self.tableview.setSortingEnabled(True)
         self.start_read_db_thread(all_data=True)
-
+        
         self.tableview.doubleClicked.connect(self.execute_file)
         self.tableview.horizontalHeader().sectionClicked.connect(self.sort_data)
 
@@ -62,7 +66,7 @@ class UI(QWidget):
 
         # 사용자 입력을 받는 위젯
         self.qle = QLineEdit(self)
-        self.qle.textEdited.connect(self.start_read_db_thread)
+        self.qle.textEdited.connect(self.update_table)
 
         # 검색된 결과의 개수를 표시하는 위젯
         self.label = QLabel(self)
@@ -81,6 +85,7 @@ class UI(QWidget):
         self.setWindowTitle('File Search Program')
         self.setGeometry(300, 100, 1500, 800)
         self.show()
+    
 
 ########################################################################################################################
 #     이벤트 핸들러 메소드
@@ -98,12 +103,13 @@ class UI(QWidget):
         self.table_model.layoutAboutToBeChanged.emit()
 
         if self.header_sorted_state[column_index]:
-            self.table_model._data = self.table_model._data.sort_values(self.table_model.headers[column_index], ascending=False)
+            self.file_list = sorted(self.file_list, key=lambda f: f[column_index], reverse = True)
             self.header_sorted_state[column_index] = False
         else:
-            self.table_model._data = self.table_model._data.sort_values(self.table_model.headers[column_index])
+            self.file_list = sorted(self.file_list, key = lambda f: f[column_index])
             self.header_sorted_state[column_index] = True
 
+        self.table_model.setDataFrame(self.file_list)
         self.table_model.layoutChanged.emit()
 
     ####################################################################################################################
@@ -154,16 +160,29 @@ class UI(QWidget):
     def displayFiles(self, file_list):
         total = len(file_list)
         self.label.setText("총 {0} 개 검색됨".format(total))
+
+        if not self.first_print : self.file_list = file_list
         if total > 0: self.first_print = True
 
         self.tableview.clearSpans()
-
         self.table_model.layoutAboutToBeChanged.emit()
         self.table_model.setDataFrame(file_list)
         self.table_model.layoutChanged.emit()
 
         self.tableview.setModel(self.table_model)
         self.tableview.resizeColumnsToContents()
+        self.e = time.time()
+        print("search time : ", self.e - self.s)
+
+    @pyqtSlot()
+    def update_table(self):
+        self.s = time.time()
+        text = self.qle.text()
+        # file_list의 첫번째 항목인 file_name을 토대로 text 값을 포함하고 있으면 displayed_file_list에 추가한다.
+        displayed_file_list = [file_info for file_info in self.file_list if text in file_info[0]]
+
+        self.displayFiles(displayed_file_list)
+        
 
     ####################################################################################################################
     # start_read_db_thread
@@ -174,9 +193,6 @@ class UI(QWidget):
     ####################################################################################################################
     @pyqtSlot()
     def start_read_db_thread(self, all_data=False):
-        if self.read_db_thread.read_running or self.scan_thread.scan_running:
-            time.sleep(0.1)
-            
         self.read_db_thread.set_finding_str(self.qle.text())
         self.read_db_thread.start(all_data)
 
@@ -194,33 +210,27 @@ class UI(QWidget):
 # View - Model 관점에서 View는 단지 데이터를 나타내기 위한 객체이며, Model은 데이터에 처리 또는 정의를 나타내는 객체이다.
 # 이러한 Model의 객체에 대한 정의를 내리는 클래스이다.
 ########################################################################################################################
+
 class TableModel(QAbstractTableModel):
+
     def __init__(self):
         super(TableModel, self).__init__()
-        self.headers = ["File", "Path", "Size(bytes)"]
 
     def setDataFrame(self, filelist):
-        self._data = pd.DataFrame(filelist, columns=self.headers)
+        self._data = filelist
 
     def data(self, index, role):
         if role == Qt.DisplayRole:
-            row = index.row()
-            col = index.column()
-            value = self._data.iloc[row, col]
+            return self._data[index.row()][index.column()]
 
-            return QVariant(str(value))
-
-    def rowCount(self, parent=None):
-        return len(self._data.index)
-
-    def columnCount(self, parent=None):
-        return len(self._data.columns.values)
-
-    def headerData(self, section, orientation, role):
-        if role == Qt.DisplayRole:
-            if orientation == Qt.Horizontal:
-                return str(self._data.columns[section])
-
+    def rowCount(self, index):
+        return len(self._data)
+    
+    def columnCount(self, index):
+        if self.rowCount == 0:
+            return 0
+        else:
+            return len(self._data[0])
 
 if __name__ == '__main__':
     freeze_support()
