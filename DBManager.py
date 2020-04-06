@@ -13,13 +13,9 @@ class DBManager:
         # sql 속도 향상을 위한 설정값
         with sqlite3.connect('Data\\data.db') as con:
             cur = con.cursor()
-            cur.execute('pragma journal_mode=wal')
-            cur.execute('pragma cache_size = 30000')
-            cur.execute('pragma synchronous=OFF')
-
             sql = "CREATE TABLE IF NOT EXISTS FileList(FILE_NAME TEXT NOT NULL, " \
-                "FILE_PATH TEXT PRIMARY KEY, " \
-                "FILE_SIZE INT NOT NULL)"
+                "FILE_PATH TEXT NOT NULL, " \
+                "FILE_SIZE INT NOT NULL, PRIMARY KEY(FILE_NAME, FILE_PATH));"
 
             cur.execute(sql)
             con.commit()
@@ -47,7 +43,6 @@ class DBManager:
             cur.execute('BEGIN')
             cur.executemany("INSERT OR REPLACE INTO FileList values (?, ?, ?)", filelist)
             con.commit()
-
 
     ####################################################################################################################
     # get_all_filelist
