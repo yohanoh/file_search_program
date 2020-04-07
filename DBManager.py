@@ -41,6 +41,7 @@ class DBManager:
         with sqlite3.connect('Data\\data.db') as con:
             cur = con.cursor()
             cur.execute('BEGIN')
+            cur.execute('delete from FileList;')
             cur.executemany("INSERT OR REPLACE INTO FileList values (?, ?, ?)", filelist)
             con.commit()
 
