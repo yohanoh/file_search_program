@@ -1,11 +1,12 @@
 import sys
+import ctypes
+
 from PyQt5.QtWidgets import QApplication, QWidget, QLineEdit, QVBoxLayout, QLabel, QTableView
-from PyQt5.QtCore import *
+from PyQt5.QtCore import pyqtSlot, QModelIndex, QAbstractTableModel, Qt
 from DBManager import DBManager
 import webbrowser
-import pandas as pd
 
-from UIthread import ScanThread, ReadDBThread
+from UIthread import *
 from multiprocessing import freeze_support
 
 import time
@@ -20,8 +21,10 @@ class UI(QWidget):
         super().__init__()
         self.DB = DBManager()
         self.file_list = []
-        self.s = 0
-        self.e = 0
+        self.update_file_list = []
+
+        self.manager_observer_thread = ManagerObserverThread()
+        self.manager_observer_thread.detect_create_signal.connect(self.insert_file_info)
 
         # DB 정보를 읽기 위한 쓰레드
         self.read_db_thread = ReadDBThread()
@@ -34,7 +37,7 @@ class UI(QWidget):
         self.scan_thread.finish_scan_signal.connect(self.finish_scan)
         self.start_scan_thread()
         
-        self.first_print = False
+        self.first_displayed_flag = False
         
         self.initUI()
 
@@ -47,10 +50,9 @@ class UI(QWidget):
     ####################################################################################################################
     def initTable(self):
         self.header_sorted_state = [False, False, False]
-
         self.table_model = TableModel()
         self.tableview.setSortingEnabled(True)
-        self.start_read_db_thread(all_data=True)
+        self.start_read_db_thread()
         
         self.tableview.doubleClicked.connect(self.execute_file)
         self.tableview.horizontalHeader().sectionClicked.connect(self.sort_data)
@@ -63,7 +65,7 @@ class UI(QWidget):
     #   위젯들을 포함한다.
     ####################################################################################################################
     def initUI(self):
-
+        
         # 사용자 입력을 받는 위젯
         self.qle = QLineEdit(self)
         self.qle.textEdited.connect(self.update_table)
@@ -85,7 +87,7 @@ class UI(QWidget):
         self.setWindowTitle('File Search Program')
         self.setGeometry(300, 100, 1500, 800)
         self.show()
-    
+        
 
 ########################################################################################################################
 #     이벤트 핸들러 메소드
@@ -101,15 +103,17 @@ class UI(QWidget):
     @pyqtSlot(int)
     def sort_data(self, column_index):
         self.table_model.layoutAboutToBeChanged.emit()
+        table_data = self.table_model.getData()
 
-        if self.header_sorted_state[column_index]:
-            self.file_list = sorted(self.file_list, key=lambda f: f[column_index], reverse = True)
+        if self.header_sorted_state[column_index]: # 오름 차순 정렬
+            table_data = sorted(table_data, key = lambda f: f[column_index] if column_index==2 else f[column_index].upper())
             self.header_sorted_state[column_index] = False
-        else:
-            self.file_list = sorted(self.file_list, key = lambda f: f[column_index])
+        
+        else: # 내림 차순 정렬
+            table_data = sorted(table_data, key=lambda f: f[column_index] if column_index==2 else f[column_index].upper(), reverse = True)
             self.header_sorted_state[column_index] = True
 
-        self.table_model.setDataFrame(self.file_list)
+        self.table_model.setData(table_data)
         self.table_model.layoutChanged.emit()
 
     ####################################################################################################################
@@ -123,19 +127,19 @@ class UI(QWidget):
         row = signal.row()
         col = signal.column()
 
-        if col == 1:
+        if col == 1: # 파일 경로 더블 클릭 -> 해당 디렉토리 열기
             index = signal.sibling(row, col)
             index_dict = self.table_model.itemData(index)
             path = index_dict.get(0)
-        else:
+        else: # 파일 명 더블 클릭 -> 해당 파일 실행
             findex = signal.sibling(row, 0)
             findex_dict = self.table_model.itemData(findex)
-            file = findex_dict.get(0)
+            file_name = findex_dict.get(0)
 
             pindex = signal.sibling(row, 1)
             pindex_dict = self.table_model.itemData(pindex)
             path = pindex_dict.get(0)
-            path = path + "\\" + file
+            path = path + "\\" + file_name
 
         webbrowser.open(path)
 
@@ -144,10 +148,16 @@ class UI(QWidget):
     # = scan_thread의 동작이 완료되었을 때을 위한 이벤트 처리 메소드
     #   백그라운드에서 계속 디렉토리 스캔을 수행하기 위해 다시 scan_thred을 실행한다.
     ####################################################################################################################
-    @pyqtSlot()
-    def finish_scan(self):
-        self.start_read_db_thread(all_data=True)
+    @pyqtSlot(list)
+    def finish_scan(self, file_list):
         print("scan completed!!")
+        self.manager_observer_thread.start()
+
+        if not self.first_displayed_flag: # 테이블에 아무런 정보가 없으면 갱신
+            self.displayFiles(file_list)
+        else: # 한 번이라도 테이블 갱신이 있었다면, file_list만 갱신해준다.
+            self.file_list = file_list
+        
 
     ####################################################################################################################
     # displayFiles
@@ -161,25 +171,23 @@ class UI(QWidget):
         total = len(file_list)
         self.label.setText("총 {0} 개 검색됨".format(total))
 
-        if not self.first_print : self.file_list = file_list
-        if total > 0: self.first_print = True
-
+        if not self.first_displayed_flag : self.file_list = file_list
+        if total > 0: self.first_displayed_flag = True
+        
         self.tableview.clearSpans()
         self.table_model.layoutAboutToBeChanged.emit()
-        self.table_model.setDataFrame(file_list)
+        self.table_model.setData(file_list)
         self.table_model.layoutChanged.emit()
 
         self.tableview.setModel(self.table_model)
         self.tableview.resizeColumnsToContents()
-        self.e = time.time()
-        print("search time : ", self.e - self.s)
 
     @pyqtSlot()
     def update_table(self):
-        self.s = time.time()
         text = self.qle.text()
+
         # file_list의 첫번째 항목인 file_name을 토대로 text 값을 포함하고 있으면 displayed_file_list에 추가한다.
-        displayed_file_list = [file_info for file_info in self.file_list if text in file_info[0]]
+        displayed_file_list = [file_info for file_info in self.file_list if text.upper() in file_info[0].upper()]
 
         self.displayFiles(displayed_file_list)
         
@@ -191,10 +199,8 @@ class UI(QWidget):
     #   scan_thread 나 read_db_thread 가 동작하고 있지 않을 경우, 사용자로부터 입력받은 문자열을 포함한 파일 정보를
     #   DB로부터 읽어온다.
     ####################################################################################################################
-    @pyqtSlot()
-    def start_read_db_thread(self, all_data=False):
-        self.read_db_thread.set_finding_str(self.qle.text())
-        self.read_db_thread.start(all_data)
+    def start_read_db_thread(self):
+        self.read_db_thread.start()
 
     ####################################################################################################################
     # start_scan_thread
@@ -204,10 +210,15 @@ class UI(QWidget):
         print("start scan")
         self.scan_thread.start()
 
+    @pyqtSlot(tuple)
+    def insert_file_info(self, file_info):
+        self.file_list.append(file_info)
+        self.update_file_list.append(file_info)    
+
 ########################################################################################################################
 # TableModel 클래스
 # QAbstractTableModel 인터페이스를 상속받아 세부 메소드를 구현하고 있다.
-# View - Model 관점에서 View는 단지 데이터를 나타내기 위한 객체이며, Model은 데이터에 처리 또는 정의를 나타내는 객체이다.
+# View - Model 관점에서 View는 단지 데이터를 나타내기 위한 객체이며, Model은 데이터 처리 또는 정의를 나타내는 객체이다.
 # 이러한 Model의 객체에 대한 정의를 내리는 클래스이다.
 ########################################################################################################################
 
@@ -216,8 +227,11 @@ class TableModel(QAbstractTableModel):
     def __init__(self):
         super(TableModel, self).__init__()
 
-    def setDataFrame(self, filelist):
+    def setData(self, filelist):
         self._data = filelist
+
+    def getData(self):
+        return self._data
 
     def data(self, index, role):
         if role == Qt.DisplayRole:
@@ -227,13 +241,24 @@ class TableModel(QAbstractTableModel):
         return len(self._data)
     
     def columnCount(self, index):
-        if self.rowCount == 0:
-            return 0
-        else:
-            return len(self._data[0])
+        return 3
+
+
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
 
 if __name__ == '__main__':
     freeze_support()
+
+    if not is_admin():
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
+    
+    
     app = QApplication(sys.argv)
     ex = UI()
     sys.exit(app.exec_())
+    
