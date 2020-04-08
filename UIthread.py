@@ -35,30 +35,47 @@ def make_filelist(content, path, isdir):
     temp = (content, path, size)
     return temp
 
+
 def search(target_dir, result_queue):
     result_list = []
-    re_app = result_list.append
 
-    temp = make_filelist(target_dir, target_dir, True)
+    # 속도 개선을 위한 처리(. 연산을 반복문 밖에서 선언)
+    re_app = result_list.append
+    math_ceil = math.ceil
+    os_stat = os.stat
+    os_path_join = os.path.join
+
+    temp = (target_dir, target_dir, True)
     re_app(temp)
 
     try:
-        s = time.time()
         # 루트 디렉토리에서 탐색하여 모든 파일 및 디렉토리 목록 스캔
+        
         for path, dirs, files in os.walk(target_dir):
             if len(dirs) > 0:
                 for d in dirs:
-                    temp = make_filelist(d, path, True)
+                    temp = (d, path, 0)
+                    re_app(temp)
 
             for fname2 in files:
-                temp = make_filelist(fname2, path, False)
+                temp = (fname2, path, math_ceil(os_stat(os_path_join(path, fname2)).st_size / 1024))
+                re_app(temp)
 
-        e = time.time()
-        print(target_dir, "os.walk : ", e - s)
-    except PermissionError as e:
+    except WindowsError as el:
+        print(el)
         pass
+    except OSError as el:
+        print(el)
+        pass
+    except Exception as el:
+        print(el)
+        pass
+
+        
     
-    result_queue.put(result_list)
+    if len(result_list) > 0: # 빈 드라이브는 수집하지 않기 위해
+        result_queue.put(result_list)
+
 
 ########################################################################################################################
 # init_filelist
@@ -79,17 +96,22 @@ def init_filelist(drive_dirs):
         for drive in drive_dirs:
             p = Process(target = search, args = (drive, result_queue, ))
             jobs.append(p)
-            p.start()         
+            p.start()
     finally:
         for proc in jobs:
             proc.join()
 
-    while result_queue.qsize() > 0:
-        result_list.extend(result_queue.get())
-    
+    while result_queue.qsize() > 0: # 각 드라이브 별로 파일 정보가 저장되어있음.
+        result_list += result_queue.get()
+    e = time.time()
+
     return result_list
 
-
+########################################################################################################################
+# CommonThread 클래스
+# 쓰레드 간 통신을 위한 클래스
+# 모든 쓰레드 클래스의 부모 클래스이다.
+########################################################################################################################
 class CommonThread(QThread):
     running = QMutex()
     drive_dirs = re.findall(r"[A-Z]+:.*$",os.popen("mountvol /").read(),re.MULTILINE)
@@ -100,21 +122,19 @@ class CommonThread(QThread):
 
     def set_db(self, db):
         self.db = db
-    
+
 
 ########################################################################################################################
 # ScanThread 클래스
 # 사용자의 디렉토리를 탐색해서 파일 정보를 수집하고, 해당 정보를 DB에 넣어주는 역할을 수행하는 쓰레드 생성을 위한 클래스
 ########################################################################################################################
 class ScanThread(CommonThread):
-
     finish_scan_signal = pyqtSignal(list)
-    
+
     def __init__(self):
         super().__init__()
 
     def run(self):
-        print("run..")
         s = time.time()
         file_list = init_filelist(self.drive_dirs)
         e = time.time()
@@ -127,29 +147,63 @@ class ScanThread(CommonThread):
         self.running.unlock()
         e = time.time()
 
-        print("insert time : ", e - s)
+        print("DB insert time : ", e - s)
     
     
 ########################################################################################################################
 # ReadDBThread 클래스
 # 사용자로부터 입력 받은 문자열을 통해, 해당 문자열을 포함하는 파일명을 가진 파일의 정보를 DB로부터 넘겨받아 처리하는 클래스
 ########################################################################################################################
-class ReadDBThread(CommonThread):
-    finish_read_signal = pyqtSignal(list)
-
+class DeleteDBThread(CommonThread):
+    
     def __init__(self):
         super().__init__()
     
+    def set_file_info(self, file_info):
+        self.file_info = file_info
+
+    def run(self):
+        self.running.lock()
+        
+        file_name = os.path.basename(self.file_info)
+        dir_path = os.path.dirname(self.file_info)
+        self.db.delete_fileinfo(file_name, dir_path)
+
+        self.running.unlock()
+
+
+class InsertDBThread(CommonThread):
+    def __init__(self):
+        super().__init__()
+    
+    def set_file_info(self, file_info):
+        self.file_info = file_info
+    
+    def run(self):
+        self.running.lock()
+        self.db.insert_fileinfo(self.file_info)
+        self.running.unlock()
+
+
+class ReadDBThread(CommonThread):
+    finish_read_signal = pyqtSignal(list)
+    
+
+    def __init__(self):
+        super().__init__()
+        self.file_info = None
+
     def run(self):
         self.running.lock()
         result = self.db.get_all_filelist()
         self.running.unlock()
         self.finish_read_signal.emit(result)
 
+            
 class ManagerObserverThread(CommonThread):
     flag = QMutex()
     file_info = []
-    detect_create_signal = pyqtSignal(tuple)
+    detect_create_signal = pyqtSignal(list)
 
     def __init__(self):
         super().__init__()
@@ -175,7 +229,6 @@ class ManagerObserverThread(CommonThread):
         while True:
             self.flag.lock()
             while len(self.file_info) > 0:
-                print("check : ", self.file_info[0])
                 self.detect_create_signal.emit(self.file_info.pop())
             self.flag.unlock()
         
@@ -211,41 +264,56 @@ class ObserverThread(CommonThread):
 class Handler(FileSystemEventHandler, ManagerObserverThread):
 #FileSystemEventHandler 클래스를 상속받음.
 #아래 핸들러들을 오버라이드 함
+    def control_event(self, event):
+        if event.event_type == 'modified':
+            pass
 
-    #파일, 디렉터리가 move 되거나 rename 되면 실행
-    def on_moved(self, event):
-        full_path = event.src_path
-        file_name = os.path.basename(full_path)
-        file_dir = os.path.dirname(full_path)
+        if event.event_type == 'created':
+            full_path = event.src_path
+            
+            if 'db-journal' in full_path:
+                return
+
+            file_name = os.path.basename(full_path)
+            file_dir = os.path.dirname(full_path)
         
-        temp = make_filelist(file_name, file_dir, os.path.isdir(full_path))
+            temp = make_filelist(file_name, file_dir, os.path.isdir(full_path))
+            if temp is None:
+                return
+        
+            temp = [temp, 2]
+            self.flag.lock()
+            self.file_info.append(temp)
+            self.flag.unlock()
+    
+        if event.event_type == 'deleted':
+            full_path = event.src_path
+            if 'db-journal' in full_path:
+                return
 
+            temp = [full_path, 3]
+            self.flag.lock()
+            self.file_info.append(temp)
+            self.flag.unlock()
+
+        if event.event_type == 'moved':
+            print("moved")
+            src_path = event.src_path
+            dest_path = event.dest_path
+            print(src_path)
+            print(dest_path)
+
+
+    def on_moved(self, event): #파일, 디렉터리가 move 되거나 rename 되면 실행
+        print(event.event_type)
+        #self.control_event(event)
 
     def on_created(self, event): #파일, 디렉터리가 생성되면 실행 -> 추가
-        full_path = event.src_path
-        file_name = os.path.basename(full_path)
-        file_dir = os.path.dirname(full_path)
+        self.control_event(event)
 
-        temp = make_filelist(file_name, file_dir, os.path.isdir(full_path))
-        if temp is None:
-            return
-
-        self.flag.lock()
-        self.file_info.append(temp)
-        self.flag.unlock()
-
-
-    def on_deleted(self, event): #파일, 디렉터리가 삭제되면 실행
-        full_path = event.src_path
-        file_name = os.path.basename(full_path)
-        file_dir = os.path.dirname(full_path)
-
-        temp = make_filelist(file_name, file_dir, os.path.isdir(full_path))
-
+    def on_deleted(self, event): #파일, 디렉터리가 삭제되면 실행 -> 파일 리스트에서 제거 후 DB에도 관련 정보 제거?
+        self.control_event(event)
 
     def on_modified(self, event): #파일, 디렉터리가 수정되면 실행
-        full_path = event.src_path
-        file_name = os.path.basename(full_path)
-        file_dir = os.path.dirname(full_path)
-
-        temp = make_filelist(file_name, file_dir, os.path.isdir(full_path))
+        #self.control_event(event)
+        pass
