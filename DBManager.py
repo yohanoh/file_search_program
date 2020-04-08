@@ -28,9 +28,9 @@ class DBManager:
         try:
             if not(os.path.isdir('Data')):
                 os.makedirs(os.path.join("Data"))
-        except OSError as e:
+        except OSError as e: 
             if e.errno != os.errno.EEXIST:
-                print("Failed to create directory")
+                print("Failed to create Data directory")
 
     ####################################################################################################################
     # insert_filelist
@@ -41,9 +41,26 @@ class DBManager:
         with sqlite3.connect('Data\\data.db') as con:
             cur = con.cursor()
             cur.execute('BEGIN')
-            cur.execute('delete from FileList;')
             cur.executemany("INSERT OR REPLACE INTO FileList values (?, ?, ?)", filelist)
             con.commit()
+
+    def insert_fileinfo(self, fileinfo):
+        with sqlite3.connect('Data\\data.db') as con:
+            cur = con.cursor()
+            cur.execute('BEGIN')
+            query = "INSERT OR REPLACE INTO FileList values ('{0}', '{1}', {2})".format(fileinfo[0], fileinfo[1], fileinfo[2])
+            cur.execute(query)
+            con.commit()
+
+
+    def delete_fileinfo(self, file_name, dir_path):
+        with sqlite3.connect('Data\\data.db') as con:
+            cur = con.cursor()
+            cur.execute('BEGIN')
+            query = "DELETE FROM FileList WHERE FILE_NAME = '{0}' AND FILE_PATH = '{1}'".format(file_name, dir_path)
+            cur.execute(query)
+            con.commit()
+
 
     ####################################################################################################################
     # get_all_filelist
@@ -57,6 +74,8 @@ class DBManager:
 
         return rows
 
+
+    """
     ####################################################################################################################
     # get_filelist_by_file_name
     # - file_name : 파일 이름에 포함되었는지를 체크하는 문자열
@@ -71,3 +90,4 @@ class DBManager:
             con.commit()
 
         return rows
+    """
