@@ -9,6 +9,7 @@ import webbrowser
 from UIthread import *
 from multiprocessing import freeze_support
 
+import subprocess
 import time
 
 ########################################################################################################################
@@ -19,23 +20,30 @@ import time
 class UI(QWidget):
     def __init__(self):
         super().__init__()
-        self.DB = DBManager()
-        self.file_list = []
-        self.update_file_list = []
+        self.db = DBManager()
+        self.file_list = [] # 테이블에 나타나게 될 파일정보를 저장하는 리스트
 
-        self.manager_observer_thread = ManagerObserverThread()
-        self.manager_observer_thread.detect_create_signal.connect(self.insert_file_info)
+        self.manager_observer_thread = ManagerObserverThread() # 각 드라이브 별로 파일 변화 감지를 수행하는 쓰레드를 관리하는 객체
+        self.manager_observer_thread.detect_create_signal.connect(self.control_updated_file)
 
         # DB 정보를 읽기 위한 쓰레드
         self.read_db_thread = ReadDBThread()
-        self.read_db_thread.set_db(self.DB)
+        self.read_db_thread.set_db(self.db)
         self.read_db_thread.finish_read_signal.connect(self.displayFiles)
+
+        # 새로 생성된 파일정보를 DB에 넣기 위한 쓰레드
+        self.insert_db_thread = InsertDBThread()
+        self.insert_db_thread.set_db(self.db)
+
+        # 삭제된 파일정보를 DB에서 제거하기 위한 쓰레드
+        self.delete_db_thread = DeleteDBThread()
+        self.delete_db_thread.set_db(self.db)
 
         # 디렉토리를 탐색해서 파일 리스트를 얻은 후, DB에 insert 하는 작업까지 수행하는 쓰레드
         self.scan_thread = ScanThread()
-        self.scan_thread.set_db(self.DB)
+        self.scan_thread.set_db(self.db)
         self.scan_thread.finish_scan_signal.connect(self.finish_scan)
-        self.start_scan_thread()
+        self.start_thread(mode = 1)
         
         self.first_displayed_flag = False
         
@@ -47,12 +55,12 @@ class UI(QWidget):
     # = 테이블 표시를 위한 기본 설정을 하는 메소드이다.
     #   테이블의 entry를 클릭 했을 때, 파일이나 디렉토리를 실행하기 위한 이벤트(execute_file)를 연결해주고,
     #   테이블의 헤더를 클릭 했을 때 정렬 기능을 실행하기 위한 이벤트(sort_data)도 연결해준다.
-    ####################################################################################################################
+    ###################################################################################################################
     def initTable(self):
         self.header_sorted_state = [False, False, False]
         self.table_model = TableModel()
         self.tableview.setSortingEnabled(True)
-        self.start_read_db_thread()
+        self.start_thread(mode = 0)
         
         self.tableview.doubleClicked.connect(self.execute_file)
         self.tableview.horizontalHeader().sectionClicked.connect(self.sort_data)
@@ -87,11 +95,16 @@ class UI(QWidget):
         self.setWindowTitle('File Search Program')
         self.setGeometry(300, 100, 1500, 800)
         self.show()
-        
+    
+    def store_fileinfo_to_db(self):
+        self.db.insert_filelist(self.update_list)
 
 ########################################################################################################################
 #     이벤트 핸들러 메소드
 ########################################################################################################################
+
+    def closeEvent(self, event):  
+        pass
 
     ####################################################################################################################
     # sort_data
@@ -106,11 +119,10 @@ class UI(QWidget):
         table_data = self.table_model.getData()
 
         if self.header_sorted_state[column_index]: # 오름 차순 정렬
-            table_data = sorted(table_data, key = lambda f: f[column_index] if column_index==2 else f[column_index].upper())
-            self.header_sorted_state[column_index] = False
-        
-        else: # 내림 차순 정렬
             table_data = sorted(table_data, key=lambda f: f[column_index] if column_index==2 else f[column_index].upper(), reverse = True)
+            self.header_sorted_state[column_index] = True
+        else: # 내림 차순 정렬
+            table_data = sorted(table_data, key = lambda f: f[column_index] if column_index==2 else f[column_index].upper())
             self.header_sorted_state[column_index] = True
 
         self.table_model.setData(table_data)
@@ -182,6 +194,7 @@ class UI(QWidget):
         self.tableview.setModel(self.table_model)
         self.tableview.resizeColumnsToContents()
 
+
     @pyqtSlot()
     def update_table(self):
         text = self.qle.text()
@@ -198,22 +211,51 @@ class UI(QWidget):
     # = 사용자로부터 입력값이 발생했을 때을 위한 이벤트 처리 메소드
     #   scan_thread 나 read_db_thread 가 동작하고 있지 않을 경우, 사용자로부터 입력받은 문자열을 포함한 파일 정보를
     #   DB로부터 읽어온다.
-    ####################################################################################################################
-    def start_read_db_thread(self):
-        self.read_db_thread.start()
+    ###################################################################################################################
+            
 
-    ####################################################################################################################
-    # start_scan_thread
-    # = 디렉토리 스캔을 수행하는 scan_thread 실행시키기 위한 메소드
-    ####################################################################################################################
-    def start_scan_thread(self):
-        print("start scan")
-        self.scan_thread.start()
+    def start_thread(self, mode):
+        if mode == 0: #read_db_thread
+            self.read_db_thread.start()
 
-    @pyqtSlot(tuple)
-    def insert_file_info(self, file_info):
+        elif mode == 1: #scan_thread
+            self.scan_thread.start()
+
+        elif mode == 2: #insert_db_thread
+            self.insert_db_thread.start()
+        
+        elif mode == 3: #delete_db_thread
+            self.delete_db_thread.start()
+
+
+    def insert_fileinfo(self, file_info):
         self.file_list.append(file_info)
-        self.update_file_list.append(file_info)    
+        self.update_table()
+
+    def delete_fileinfo(self, file_path):
+        file_name = os.path.basename(file_path)
+        dir_path =os.path.dirname(file_path)
+
+        for f in self.file_list:
+            if f[0] == file_name and f[1] == dir_path:
+                self.file_list.remove(f)
+                break
+        self.update_table
+
+    @pyqtSlot(list)
+    def control_updated_file(self, file_info):
+        mode = file_info[1]
+        file_info = file_info[0]
+
+        if mode == 2: # on created
+            self.insert_fileinfo(file_info)
+            self.insert_db_thread.set_file_info(file_info)
+
+        elif mode == 3: # on deleted
+            self.delete_fileinfo(file_info)
+            self.delete_db_thread.set_file_info(file_info)
+
+        self.start_thread(mode)
 
 ########################################################################################################################
 # TableModel 클래스
@@ -253,12 +295,17 @@ def is_admin():
 
 if __name__ == '__main__':
     freeze_support()
+    #if not is_admin():
+     #   ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
 
-    if not is_admin():
-        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
-    
-    
-    app = QApplication(sys.argv)
-    ex = UI()
-    sys.exit(app.exec_())
+    try:
+        app = QApplication(sys.argv)
+        ex = UI()
+        sys.exit(app.exec_())
+    finally:
+        pid = os.getpid()
+        spid = str(pid)
+        subprocess.run(args = ['taskkill', '/F', '/T', '/PID', spid], shell = False)
+
+        
     
