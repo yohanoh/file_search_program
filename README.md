@@ -1,6 +1,18 @@
 # 파일 및 디렉토리 검색 프로그램(FileSearch)
 
 ## 업데이트 내역
+
+### 2020-04-09
+#### 기능
+- `manager_observer_thread` 의 시작도 `start_thread`로 시작하도록 수정
+- `UI` 클래스의 인스턴스 변수 `first_displayed_flag` 제거 (초기 DB 생성 후, 입력값을 기준으로 테이블을 표시하도록)
+- 파일 변경 감지 동작 구현(이름 바꾸기, 이동)
+- `UIthread` 모듈 내 `handler` 클래스 내에서 중복된 코드를 제거하여 `insert_file` 과 `delete_file` 메소드 구현
+- `ReadDBThread` 의 `finish_read_signal`을 `finish_read` 메소드와 연결
+
+#### 에러
+- ManagerObserverThread가 CPU 부하를 많이 잡아먹는 현상 해결(무한루프 상태에서 sleep 을 줌)
+  
 ### 2020-04-08
 #### 기능
 - 파일 생성 이벤트 발생 시, 정보를 테이블에 갱신하고 DB에도 넣는 과정 추가
