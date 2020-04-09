@@ -44,6 +44,11 @@ class DBManager:
             cur.executemany("INSERT OR REPLACE INTO FileList values (?, ?, ?)", filelist)
             con.commit()
 
+    ####################################################################################################################
+    # insert_fileinfo
+    # - fileinfo : DB에 저장하게 될 파일정보(파일 이름, 경로, 크기)
+    # = 인자로 넘겨 받은 단일 파일 정보를 DB에 저장하는 메소드
+    ####################################################################################################################
     def insert_fileinfo(self, fileinfo):
         with sqlite3.connect('Data\\data.db') as con:
             cur = con.cursor()
@@ -52,15 +57,19 @@ class DBManager:
             cur.execute(query)
             con.commit()
 
-
-    def delete_fileinfo(self, file_name, dir_path):
+    ####################################################################################################################
+    # delete_fileinfo
+    # - file_name : DB에서 삭제하게 될 파일의 이름
+    # - dir_name : DB에서 삭제하게 될 파일의 경로
+    # = 인자로 넘겨 받은 단일 파일 정보를 DB에서 삭제하는 메소드
+    ####################################################################################################################
+    def delete_fileinfo(self, file_name, dir_name):
         with sqlite3.connect('Data\\data.db') as con:
             cur = con.cursor()
             cur.execute('BEGIN')
-            query = "DELETE FROM FileList WHERE FILE_NAME = '{0}' AND FILE_PATH = '{1}'".format(file_name, dir_path)
+            query = "DELETE FROM FileList WHERE FILE_NAME = '{0}' AND FILE_PATH = '{1}'".format(file_name, dir_name)
             cur.execute(query)
             con.commit()
-
 
     ####################################################################################################################
     # get_all_filelist
@@ -73,21 +82,4 @@ class DBManager:
             rows = cur.execute(query).fetchall()
 
         return rows
-
-
-    """
-    ####################################################################################################################
-    # get_filelist_by_file_name
-    # - file_name : 파일 이름에 포함되었는지를 체크하는 문자열
-    # = 인자로 받은 file_name을 포함한 파일명을 가진 파일 정보를 리턴해주는 메소드
-    ####################################################################################################################
-    def get_filelist_by_file_name(self, file_name):
-        with sqlite3.connect('Data\\data.db') as con:
-            cur = con.cursor()
-            cur.execute('BEGIN')
-            query = "SELECT * FROM FileList WHERE FILE_NAME LIKE '%{0}%'".format(file_name)
-            rows = cur.execute(query).fetchall()
-            con.commit()
-
-        return rows
-    """
+        
