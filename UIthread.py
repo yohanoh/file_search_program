@@ -42,7 +42,7 @@ def get_file_size(full_path, isdir):
 # = 각 드라이브 별로 탐색을 시작하여 파일 정보를 수집하게 된다.
 #   수집한 정보는 일차적으로 result_list에 넣고, 모든 수집이 끝나면 result_list를 공유 큐인 result_queue에 넣는다.
 ########################################################################################################################
-def search(target_dir, result_queue):
+def search(target_dir, result_queue = None):
     result_list = []
 
     # 속도 개선을 위한 처리(. 연산을 반복문 밖에서 선언)
@@ -69,15 +69,18 @@ def search(target_dir, result_queue):
                 re_app(temp)
 
         except WindowsError as el:
-            print(el)
+            #print(el)
             pass
         except OSError as el:
-            print(el)
+            #print(el)
             pass
         except Exception as el:
-            print(el)
+            #print(el)
             pass
-    
+
+    if result_queue is None:
+        return result_list
+
     if len(result_list) > 1: # 빈 드라이브는 수집하지 않기 위해
         result_queue.put(result_list)
 
@@ -95,17 +98,21 @@ def init_filelist(drive_dirs):
     result_list = []
     jobs = []
 
-    try:
-        for drive in drive_dirs:
-            p = Process(target = search, args = (drive, result_queue, ))
-            jobs.append(p)
-            p.start()
-    finally:
-        for proc in jobs:
-            proc.join()
+    if len(drive_dirs) > 1: # 드라이브가 1개보다 많으면 멀티 프로세스로 실행
+        try:
+            for drive in drive_dirs:
+                print(drive)
+                p = Process(target = search, args = (drive, result_queue, ))
+                jobs.append(p)
+                p.start()
+        finally:
+            for proc in jobs:
+                proc.join()
 
-    while result_queue.qsize() > 0: # 각 드라이브 별로 파일 정보가 저장되어있음.
-        result_list += result_queue.get()
+        while result_queue.qsize() > 0: # 각 드라이브 별로 파일 정보가 저장되어있음.
+            result_list += result_queue.get()
+    else: # 드라이브가 단일이면 별도의 프로세스를 생성하지 않음
+        result_list = search(drive_dirs[0])
 
     return result_list
 
@@ -247,7 +254,7 @@ class ManagerObserverThread(CommonThread):
             while len(self.changed_file_info) > 0:
                 self.file_change_signal.emit(self.changed_file_info.pop())
             self.flag.unlock()
-            sleep(0.05)
+            sleep(0.5)
         
 ########################################################################################################################
 # ObserverThread 클래스
@@ -269,7 +276,7 @@ class ObserverThread(CommonThread):
         try:
             self.observer.start()
             while True:
-                time.sleep(0.05)
+                time.sleep(0.5)
         except PermissionError:
             pass
 
@@ -313,10 +320,11 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
     #파일, 디렉터리가 생성되면 실행 -> 테이블 및 DB에 추가
     def on_created(self, event): 
         full_path = event.src_path
-        
+
         if 'db-journal' in full_path:
             pass
         else:
+            print(full_path)
             self.insert_file(full_path)
 
     #파일, 디렉터리가 삭제되면 실행 -> 데이블 및 DB에서 제거
@@ -326,6 +334,7 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
         if 'db-journal' in full_path:
             pass
         else:
+            print(full_path)
             self.delete_file(full_path)
 
     #파일, 디렉터리가 move 되거나 rename 되면 실행 -> 이전 자료 삭제 후 새로운 자료로 갱신
@@ -336,6 +345,7 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
         if 'db-journal' in src_path or 'db-journal' in dest_path:
             pass
         else:
+            print(src_path)
             self.insert_file(dest_path)
             self.delete_file(src_path)
 
