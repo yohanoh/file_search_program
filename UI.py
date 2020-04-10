@@ -1,16 +1,17 @@
 import sys
 import ctypes
+import win32com.shell.shell as shell
+import webbrowser
+import subprocess
+import time
+from multiprocessing import freeze_support
 
 from PyQt5.QtWidgets import QApplication, QWidget, QLineEdit, QVBoxLayout, QLabel, QTableView
 from PyQt5.QtCore import pyqtSlot, QModelIndex, QAbstractTableModel, Qt
+
 from DBManager import DBManager
-import webbrowser
-
 from UIthread import *
-from multiprocessing import freeze_support
 
-import subprocess
-import time
 
 ########################################################################################################################
 # UI 클래스
@@ -43,7 +44,6 @@ class UI(QWidget):
         self.delete_db_thread = DeleteDBThread()
         self.delete_db_thread.set_db(self.db)
 
-        
         # 각 드라이브 별로 파일 변화 감지를 수행하는 쓰레드를 관리하는 쓰레드
         self.manager_observer_thread = ManagerObserverThread()
         self.manager_observer_thread.file_change_signal.connect(self.control_updated_file)
@@ -61,7 +61,7 @@ class UI(QWidget):
         self.header_sorted_state = [False, False, False]
         self.table_model = TableModel()
         self.tableview.setSortingEnabled(True)
-        
+
         self.tableview.doubleClicked.connect(self.execute_file)
         self.tableview.horizontalHeader().sectionClicked.connect(self.sort_data)
 
@@ -321,8 +321,16 @@ def is_admin():
 
 if __name__ == '__main__':
     freeze_support()
-    #if not is_admin():
-     #   ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
+
+    # 실행 파일을 권리자 권한으로 수행하기 위해 사용하는 코드
+    """
+    if not is_admin(): 
+        script = os.path.abspath(sys.argv[0])
+        params = ' '.join([script] + sys.argv[1:])
+    
+        shell.ShellExecuteEx(nShow = 1, lpVerb = 'runas', lpFile = sys.executable, lpParameters=params)
+        sys.exit()
+    """
     
     try:
         app = QApplication(sys.argv)

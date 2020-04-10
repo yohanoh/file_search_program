@@ -2,8 +2,7 @@ from PyQt5.QtCore import QThread, pyqtSignal, QMutex, pyqtSlot
 import os
 import sys
 import re
-from multiprocessing import Manager, freeze_support, Pool, Process, Pipe, Queue
-from itertools import repeat
+from multiprocessing import Manager, freeze_support, Pool, Process, Queue
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -53,7 +52,7 @@ def search(target_dir, result_queue = None):
     os_walk = os.walk
 
     # 드라이브 루트 디렉토리(c:\, e:\ 등) 에 대한 정보 저장
-    temp = (target_dir, target_dir, True)
+    temp = (target_dir, target_dir, 0)
     re_app(temp)
 
      # 루트 디렉토리 하위를 탐색해서 파일 정보 저장
@@ -68,17 +67,12 @@ def search(target_dir, result_queue = None):
                 temp = (fname2, path, math_ceil(os_stat(os_path_join(path, fname2)).st_size / 1024))
                 re_app(temp)
 
-        except WindowsError as el:
-            #print(el)
+        except WindowsError as el: # 권한 문제로 접근이 불가하면 해당 파일 스킵
             pass
         except OSError as el:
-            #print(el)
-            pass
-        except Exception as el:
-            #print(el)
             pass
 
-    if result_queue is None:
+    if result_queue is None: # 단일 드라이브로 구성된 경우는 
         return result_list
 
     if len(result_list) > 1: # 빈 드라이브는 수집하지 않기 위해
@@ -101,7 +95,6 @@ def init_filelist(drive_dirs):
     if len(drive_dirs) > 1: # 드라이브가 1개보다 많으면 멀티 프로세스로 실행
         try:
             for drive in drive_dirs:
-                print(drive)
                 p = Process(target = search, args = (drive, result_queue, ))
                 jobs.append(p)
                 p.start()
@@ -254,7 +247,7 @@ class ManagerObserverThread(CommonThread):
             while len(self.changed_file_info) > 0:
                 self.file_change_signal.emit(self.changed_file_info.pop())
             self.flag.unlock()
-            sleep(0.5)
+            sleep(1)
         
 ########################################################################################################################
 # ObserverThread 클래스
@@ -276,7 +269,7 @@ class ObserverThread(CommonThread):
         try:
             self.observer.start()
             while True:
-                time.sleep(0.5)
+                time.sleep(1)
         except PermissionError:
             pass
 
@@ -324,7 +317,6 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
         if 'db-journal' in full_path:
             pass
         else:
-            print(full_path)
             self.insert_file(full_path)
 
     #파일, 디렉터리가 삭제되면 실행 -> 데이블 및 DB에서 제거
@@ -334,7 +326,6 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
         if 'db-journal' in full_path:
             pass
         else:
-            print(full_path)
             self.delete_file(full_path)
 
     #파일, 디렉터리가 move 되거나 rename 되면 실행 -> 이전 자료 삭제 후 새로운 자료로 갱신
@@ -345,11 +336,7 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
         if 'db-journal' in src_path or 'db-journal' in dest_path:
             pass
         else:
-            print(src_path)
             self.insert_file(dest_path)
             self.delete_file(src_path)
-
-    def on_modified(self, event): #파일, 디렉터리가 수정되면 실행
-        pass
             
         
