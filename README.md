@@ -19,6 +19,12 @@
 
 ## 업데이트 내역
 
+### <2020-04-13>
+#### 기능
+- 프로그램 시작과 동시에 manager_observer_thread 시작하도록 수정
+- 헤더 사이즈 고정
+
+
 ### <2020-04-09>
 #### 기능
 - `manager_observer_thread` 의 시작도 `start_thread`로 시작하도록 수정

@@ -65,6 +65,7 @@ class UI(QWidget):
     def initTable(self):
         self.header_sorted_state = [False, False, False]
         self.table_model = TableModel()
+
         self.tableview.setSortingEnabled(True)
 
         self.tableview.doubleClicked.connect(self.execute_file)
@@ -117,7 +118,11 @@ class UI(QWidget):
         self.table_model.layoutChanged.emit()
 
         self.tableview.setModel(self.table_model)
-        self.tableview.resizeColumnsToContents()
+        self.tableview.setColumnWidth(0, 600)
+        self.tableview.setColumnWidth(1, 600)
+        self.tableview.setColumnWidth(2, 80)
+
+        #self.tableview.resizeColumnsToContents()
     
 
     ########################################################################################################################
@@ -271,7 +276,6 @@ class UI(QWidget):
         self.count = 0
         
         # file_list의 첫번째 항목인 file_name을 토대로 text 값을 포함하고 있으면 displayed_file_list에 추가한다.
-        
         displayed_file_list = [file_info for file_info in self.cached_file_list if text in file_info[0].upper()]
         self.displayFiles(displayed_file_list)
 

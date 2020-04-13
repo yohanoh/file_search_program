@@ -339,6 +339,7 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
             self.insert_file(dest_path)
             self.delete_file(src_path)
 
+
 class checkTime(QThread):
     timeout = pyqtSignal()
 
@@ -348,5 +349,4 @@ class checkTime(QThread):
     def run(self):
         sleep(1)
         self.timeout.emit()
-
 
