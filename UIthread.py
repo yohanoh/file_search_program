@@ -86,8 +86,8 @@ def search(target_dir, result_queue = None):
 #   각각의 프로세스는 공유 큐인 result_queue을 공유하여 결과를 저장하고, 저장된 정보를 리스트로 변환하여 리턴한다.
 ########################################################################################################################
 def init_filelist(drive_dirs):
-    manager = Manager()
-    result_queue = manager.Queue()
+    manager = Manager() # 프로세스 간 동기화를 관리
+    result_queue = manager.Queue() # 프로세스 간 공유 큐 지정
     
     result_list = []
     jobs = []
@@ -102,7 +102,7 @@ def init_filelist(drive_dirs):
             for proc in jobs:
                 proc.join()
 
-        while result_queue.qsize() > 0: # 각 드라이브 별로 파일 정보가 저장되어있음.
+        while result_queue.qsize() > 0: # result_queue -> result_list 로 변환
             result_list += result_queue.get()
     else: # 드라이브가 단일이면 별도의 프로세스를 생성하지 않음
         result_list = search(drive_dirs[0])
@@ -338,5 +338,15 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
         else:
             self.insert_file(dest_path)
             self.delete_file(src_path)
-            
-        
+
+class checkTime(QThread):
+    timeout = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self):
+        sleep(1)
+        self.timeout.emit()
+
+

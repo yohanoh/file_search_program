@@ -23,7 +23,7 @@ class UI(QWidget):
         super().__init__()
         self.db = DBManager()
         self.cached_file_list = [] # DB를 통해 검색하지 않고, 메모리에 올려서 검색을 수행하기 위한 파일 리스트
-        self.finish_scan_flag = False # scan_thread 실행 상태를 나타내는 플래그
+        self.count = 0
 
         # 테이블 갱신
         self.initUI()
@@ -53,6 +53,8 @@ class UI(QWidget):
         self.manager_observer_thread.file_change_signal.connect(self.control_updated_file)
         self.start_thread(mode = 2)
 
+        self.check_time = checkTime()
+        self.check_time.timeout.connect(self.processing_time_out)
 
     ####################################################################################################################
     # initTable
@@ -147,8 +149,7 @@ class UI(QWidget):
     ########################################################################################################################
     def insert_fileinfo(self, file_info):
         self.cached_file_list.append(file_info)
-        if self.finish_scan_flag:
-            self.update_table_data()
+        self.update_table_data()
 
 
     ########################################################################################################################
@@ -165,9 +166,11 @@ class UI(QWidget):
                 self.cached_file_list.remove(f)
                 break
         
-        if self.finish_scan_flag:
-            self.update_table_data()
+        self.update_table_data()
 
+
+    def processing_time_out(self):
+        self.update_table_data(True)
 
 ########################################################################################################################
 #     이벤트 핸들러 메소드
@@ -256,16 +259,21 @@ class UI(QWidget):
     #   생성된 파일 정보를 displayFiles 메소드를 통해 테이블 나타낸다.
     ########################################################################################################################
     @pyqtSlot()
-    def update_table_data(self):
-        s = time.time()
+    def update_table_data(self, time_out = False):
         text = self.qle.text().upper()
+        
+        if self.count < 2 and len(text) > 0 and not time_out:
+            # time check
+            self.count = self.count + 1
+            self.check_time.start()
+            return
+        
+        self.count = 0
+        
         # file_list의 첫번째 항목인 file_name을 토대로 text 값을 포함하고 있으면 displayed_file_list에 추가한다.
+        
         displayed_file_list = [file_info for file_info in self.cached_file_list if text in file_info[0].upper()]
-        e1 = time.time()
-
         self.displayFiles(displayed_file_list)
-        e = time.time()
-        print("total : {0}, search : {1}".format(e - s, e1 - s))
 
     ########################################################################################################################
     # control_updated_file
