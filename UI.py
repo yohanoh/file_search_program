@@ -25,6 +25,9 @@ class UI(QWidget):
         self.cached_file_list = [] # DB를 통해 검색하지 않고, 메모리에 올려서 검색을 수행하기 위한 파일 리스트
         self.finish_scan_flag = False # scan_thread 실행 상태를 나타내는 플래그
 
+        # 테이블 갱신
+        self.initUI()
+
         # 디렉토리를 탐색해서 파일 리스트를 얻은 후, DB에 insert 하는 작업까지 수행하는 쓰레드
         self.scan_thread = ScanThread()
         self.scan_thread.set_db(self.db)
@@ -49,8 +52,6 @@ class UI(QWidget):
         self.manager_observer_thread = ManagerObserverThread()
         self.manager_observer_thread.file_change_signal.connect(self.control_updated_file)
         self.start_thread(mode = 2)
-        
-        self.initUI()
 
 
     ####################################################################################################################
@@ -115,7 +116,7 @@ class UI(QWidget):
 
         self.tableview.setModel(self.table_model)
         self.tableview.resizeColumnsToContents()
-
+    
 
     ########################################################################################################################
     # start_thread
@@ -256,12 +257,15 @@ class UI(QWidget):
     ########################################################################################################################
     @pyqtSlot()
     def update_table_data(self):
+        s = time.time()
         text = self.qle.text().upper()
         # file_list의 첫번째 항목인 file_name을 토대로 text 값을 포함하고 있으면 displayed_file_list에 추가한다.
         displayed_file_list = [file_info for file_info in self.cached_file_list if text in file_info[0].upper()]
+        e1 = time.time()
 
         self.displayFiles(displayed_file_list)
-
+        e = time.time()
+        print("total : {0}, search : {1}".format(e - s, e1 - s))
 
     ########################################################################################################################
     # control_updated_file
@@ -346,6 +350,4 @@ if __name__ == '__main__':
         spid = str(pid)
         
         subprocess.run(args = ['taskkill', '/F', '/T', '/PID', spid], shell = False)
-        
-        
     
