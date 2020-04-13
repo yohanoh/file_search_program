@@ -1,5 +1,4 @@
 import sqlite3
-import time
 import os
 
 ########################################################################################################################
@@ -82,4 +81,3 @@ class DBManager:
             rows = cur.execute(query).fetchall()
 
         return rows
-        

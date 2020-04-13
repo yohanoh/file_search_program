@@ -117,12 +117,13 @@ class UI(QWidget):
         self.table_model.setData(file_list)
         self.table_model.layoutChanged.emit()
 
+
+
         self.tableview.setModel(self.table_model)
         self.tableview.setColumnWidth(0, 600)
         self.tableview.setColumnWidth(1, 600)
         self.tableview.setColumnWidth(2, 80)
 
-        #self.tableview.resizeColumnsToContents()
     
 
     ########################################################################################################################
@@ -154,8 +155,8 @@ class UI(QWidget):
     ########################################################################################################################
     def insert_fileinfo(self, file_info):
         self.cached_file_list.append(file_info)
-        self.update_table_data()
-
+        self.check_time.start()
+        #self.update_table_data()
 
     ########################################################################################################################
     # delete_fileinfo
@@ -170,8 +171,9 @@ class UI(QWidget):
             if f[0] == file_name and f[1] == dir_name:
                 self.cached_file_list.remove(f)
                 break
-        
-        self.update_table_data()
+
+        self.check_time.start()
+        #self.update_table_data()
 
 
     def processing_time_out(self):
@@ -309,6 +311,7 @@ class UI(QWidget):
 # 이러한 Model의 객체에 대한 정의를 내리는 클래스이다.
 ########################################################################################################################
 class TableModel(QAbstractTableModel):
+    header_labels = ['Name', 'Path', 'Size(KB)']
 
     def __init__(self):
         super(TableModel, self).__init__()
@@ -322,6 +325,11 @@ class TableModel(QAbstractTableModel):
     def data(self, index, role):
         if role == Qt.DisplayRole:
             return self._data[index.row()][index.column()]
+
+    def headerData(self, section, orientation, role = Qt.DisplayRole):
+        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+            return self.header_labels[section]
+        return QAbstractTableModel.headerData(self, section, orientation, role)
 
     def rowCount(self, index):
         return len(self._data)

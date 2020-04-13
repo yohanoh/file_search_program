@@ -1,8 +1,7 @@
-from PyQt5.QtCore import QThread, pyqtSignal, QMutex, pyqtSlot
+from PyQt5.QtCore import QThread, pyqtSignal, QMutex
 import os
-import sys
 import re
-from multiprocessing import Manager, freeze_support, Pool, Process, Queue
+from multiprocessing import Manager, Process
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -272,7 +271,6 @@ class ObserverThread(CommonThread):
                 time.sleep(1)
         except PermissionError:
             pass
-
         except Exception as e:
             self.observer.stop()
             self.observer.join()
