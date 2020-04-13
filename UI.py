@@ -23,6 +23,7 @@ class UI(QWidget):
         super().__init__()
         self.db = DBManager()
         self.cached_file_list = [] # DB를 통해 검색하지 않고, 메모리에 올려서 검색을 수행하기 위한 파일 리스트
+        self.finish_scan_flag = False # scan_thread 실행 상태를 나타내는 플래그
 
         # 디렉토리를 탐색해서 파일 리스트를 얻은 후, DB에 insert 하는 작업까지 수행하는 쓰레드
         self.scan_thread = ScanThread()
@@ -47,6 +48,7 @@ class UI(QWidget):
         # 각 드라이브 별로 파일 변화 감지를 수행하는 쓰레드를 관리하는 쓰레드
         self.manager_observer_thread = ManagerObserverThread()
         self.manager_observer_thread.file_change_signal.connect(self.control_updated_file)
+        self.start_thread(mode = 2)
         
         self.initUI()
 
@@ -144,7 +146,8 @@ class UI(QWidget):
     ########################################################################################################################
     def insert_fileinfo(self, file_info):
         self.cached_file_list.append(file_info)
-        self.update_table_data()
+        if self.finish_scan_flag:
+            self.update_table_data()
 
 
     ########################################################################################################################
@@ -160,7 +163,9 @@ class UI(QWidget):
             if f[0] == file_name and f[1] == dir_name:
                 self.cached_file_list.remove(f)
                 break
-        self.update_table_data()
+        
+        if self.finish_scan_flag:
+            self.update_table_data()
 
 
 ########################################################################################################################
@@ -228,7 +233,7 @@ class UI(QWidget):
     ####################################################################################################################
     @pyqtSlot(list)
     def finish_scan(self, file_list):
-        self.start_thread(mode = 2)
+        self.finish_scan_flag = True
         self.cached_file_list = file_list
         self.update_table_data()
 
