@@ -143,7 +143,6 @@ class ScanThread(CommonThread):
         file_list = init_filelist(self.drive_dirs)
         e = time.time()
         self.finish_scan_signal.emit(file_list)
-        file_list.clear()
         print("scan time : ", e - s)
 
         # 스캔 결과 DB에 insert
@@ -154,7 +153,7 @@ class ScanThread(CommonThread):
         e = time.time()
 
         print("DB insert time : ", e - s)
-    
+        file_list.clear()
 
 ########################################################################################################################
 # ReadDBThread 클래스
