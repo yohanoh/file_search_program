@@ -347,14 +347,14 @@ if __name__ == '__main__':
     freeze_support()
 
     # 실행 파일을 권리자 권한으로 수행하기 위해 사용하는 코드
-    
+    """
     if not is_admin(): 
         script = os.path.abspath(sys.argv[0])
         params = ' '.join([script] + sys.argv[1:])
     
         shell.ShellExecuteEx(nShow = 1, lpVerb = 'runas', lpFile = sys.executable, lpParameters=params)
         sys.exit()
-    
+    """
     
     try:
         app = QApplication(sys.argv)
