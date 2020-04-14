@@ -57,7 +57,7 @@ def search(target_dir, result_queue = None):
      # 루트 디렉토리 하위를 탐색해서 파일 정보 저장
     for path, dirs, files in os_walk(target_dir):
         try:
-            if len(dirs) > 0:
+            if dirs:
                 for d in dirs:
                     temp = (d, path, 0)
                     re_app(temp)
@@ -66,12 +66,13 @@ def search(target_dir, result_queue = None):
                 temp = (fname2, path, math_ceil(os_stat(os_path_join(path, fname2)).st_size / 1024))
                 re_app(temp)
 
+
         except WindowsError as el: # 권한 문제로 접근이 불가하면 해당 파일 스킵
             pass
         except OSError as el:
             pass
 
-    if result_queue is None: # 단일 드라이브로 구성된 경우는 
+    if result_queue is None: # 단일 드라이브로 구성된 경우는
         return result_list
 
     if len(result_list) > 1: # 빈 드라이브는 수집하지 않기 위해
@@ -142,6 +143,7 @@ class ScanThread(CommonThread):
         file_list = init_filelist(self.drive_dirs)
         e = time.time()
         self.finish_scan_signal.emit(file_list)
+        file_list.clear()
         print("scan time : ", e - s)
 
         # 스캔 결과 DB에 insert
@@ -216,7 +218,6 @@ class InsertDBThread(CommonThread):
 # ObserverThread가 수집한 변경 정보를 탐지하고, 해당 정보를 file_change_signal를 통해 UI 객체에게 보낸다.
 ########################################################################################################################
 class ManagerObserverThread(CommonThread):
-    flag = QMutex() # changed_file_info에 대한 접근을 컨트롤하기 위한 Mutex
     changed_file_info = [] # 파일 변경 이력이 담기게 되는 리스트
     file_change_signal = pyqtSignal(list) # UI 객체에게 시그널을 보내기 위한 객체
 
@@ -242,10 +243,8 @@ class ManagerObserverThread(CommonThread):
     # ObserverThread에 의해 갱신된 changed_file_info를 감지하기 위한 메소드
     def check_changed_file_info(self):
         while True:
-            self.flag.lock()
             while len(self.changed_file_info) > 0:
                 self.file_change_signal.emit(self.changed_file_info.pop())
-            self.flag.unlock()
             sleep(1)
         
 ########################################################################################################################
@@ -292,9 +291,7 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
             pass
         else:
             temp = [(file_name, dir_name, size), mode]
-            self.flag.lock()
             self.changed_file_info.append(temp)
-            self.flag.unlock()
         
 
     # 테이블 및 Db에서 정보 삭제를 위한 파일 정보와 mode 값을 지정
@@ -304,9 +301,7 @@ class Handler(FileSystemEventHandler, ManagerObserverThread):
         dir_name = os.path.dirname(full_path)
 
         temp = [(file_name, dir_name), mode]
-        self.flag.lock()
         self.changed_file_info.append(temp)
-        self.flag.unlock()
 
     #파일, 디렉터리가 생성되면 실행 -> 테이블 및 DB에 추가
     def on_created(self, event): 

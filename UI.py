@@ -23,7 +23,7 @@ class UI(QWidget):
         super().__init__()
         self.db = DBManager()
         self.cached_file_list = [] # DB를 통해 검색하지 않고, 메모리에 올려서 검색을 수행하기 위한 파일 리스트
-        self.count = 0
+        self.count = 0 # 사용자 입력값이 2개 이상일 때 처리해주기 위해 구성
 
         # 테이블 갱신
         self.initUI()
@@ -117,8 +117,6 @@ class UI(QWidget):
         self.table_model.setData(file_list)
         self.table_model.layoutChanged.emit()
 
-
-
         self.tableview.setModel(self.table_model)
         self.tableview.setColumnWidth(0, 600)
         self.tableview.setColumnWidth(1, 600)
@@ -156,7 +154,6 @@ class UI(QWidget):
     def insert_fileinfo(self, file_info):
         self.cached_file_list.append(file_info)
         self.check_time.start()
-        #self.update_table_data()
 
     ########################################################################################################################
     # delete_fileinfo
@@ -173,8 +170,6 @@ class UI(QWidget):
                 break
 
         self.check_time.start()
-        #self.update_table_data()
-
 
     def processing_time_out(self):
         self.update_table_data(True)
@@ -246,6 +241,7 @@ class UI(QWidget):
     def finish_scan(self, file_list):
         self.finish_scan_flag = True
         self.cached_file_list = file_list
+        len(self.cached_file_list)
         self.update_table_data()
 
 
@@ -270,7 +266,6 @@ class UI(QWidget):
         text = self.qle.text().upper()
         
         if self.count < 2 and len(text) > 0 and not time_out:
-            # time check
             self.count = self.count + 1
             self.check_time.start()
             return
@@ -352,14 +347,14 @@ if __name__ == '__main__':
     freeze_support()
 
     # 실행 파일을 권리자 권한으로 수행하기 위해 사용하는 코드
-    """
+    
     if not is_admin(): 
         script = os.path.abspath(sys.argv[0])
         params = ' '.join([script] + sys.argv[1:])
     
         shell.ShellExecuteEx(nShow = 1, lpVerb = 'runas', lpFile = sys.executable, lpParameters=params)
         sys.exit()
-    """
+    
     
     try:
         app = QApplication(sys.argv)
